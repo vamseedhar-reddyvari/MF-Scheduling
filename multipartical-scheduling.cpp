@@ -10,7 +10,7 @@
  *
  */
 #include"multipartical-scheduling.h"
-string OUTPUT_FILE_PATH = "/Users/Vamsee/Work/GitHub/MFE-Scheduling/";
+string OUTPUT_FILE_PATH = "/Users/Vamsee/Work/GitHub/MF-Scheduling/";
 //Classes
 class User{
 public:
@@ -22,9 +22,10 @@ public:
 User::User(){
 //        id = User::user_id;
 //        User::user_id = User::user_id +1;
-    queue_state = rand()%MAXQUEUE;
+    queue_state = rand()%QFINAL;
 }
 
+void write_func_queue_trunc(darray &function,string file_name,unsigned int limit);
 void write_func_queue(darray &function,string file_name);
 void write_func_bid(darray &function,string file_name);
 double update_rho_function(darray &Pi, darray &optimal_policy, darray &rho);
@@ -61,7 +62,7 @@ int main(int argc, const char * argv[]) {
     darray rho(MAXBID);
     rho[0] = 0;
     for(int i=1;i<MAXBID;i++){
-        rho[i] = min(rho[i-1] + 0.001,1);
+        rho[i] = min(rho[i-1] + 0.01,1);
     }
 
     darray optimal_policy(MAXQUEUE-MAXARRIVAL);
@@ -70,12 +71,18 @@ int main(int argc, const char * argv[]) {
 
     double distance = 10;
     while(distance >pow(10,-2)) {
+        //Testing intialization
         // Value iteration step. Find optimal policy
         value_iteration(rho, V, Phi, optimal_policy);
         write_func_queue(V,"value-func.txt");
         // State change step by conducting auction
-        state_change(user_array, optimal_policy);
-        write_func_bid(optimal_policy,"optimal-policy.txt");
+        cout<<"State Chnage.";
+        for(int j=0;j<50;j++) {
+            state_change(user_array, optimal_policy);
+//            cout<<".";
+        }
+        cout<<endl;
+        write_func_queue_trunc(optimal_policy,"optimal-policy.txt",MAXQUEUE-MAXARRIVAL);
         // PI Update
         update_pi(user_array, PI);
         write_func_queue(PI,"pi-func.txt");
@@ -101,11 +108,18 @@ double update_pi(vector<User *> &user_array,darray &PI){
         PI[i] = 0;
     }
     for (auto user:user_array){
-        double q = user->queue_state;
+        int q = user->queue_state;
+        if (q>=2500){
+            cout<<"PI Overflow"<<endl;
+        }
         PI[q] = PI[q]+1;
     }
     for(int i=0;i<MAXQUEUE;i++){
         PI[i] = (double) PI[i]/Total_Users;
+    }
+    for(int i=1;i<MAXQUEUE;i++){
+        PI[i] = PI[i] + PI[i-1];
+
     }
     cout<<"PI update done"<<endl;
 }
@@ -116,27 +130,43 @@ double update_pi(vector<User *> &user_array,darray &PI){
 
 double update_rho_function(darray &Pi, darray &optimal_policy, darray &rho)
 {
-    int x=0,q=0;
+    //Testing
+    double sum_pi = 0;
+    for (int k=0;k<MAXQUEUE;k++){
+        sum_pi = sum_pi + Pi[k];
+    }
+    sum_pi = Pi[MAXQUEUE-1];
+    double rho_cum = rho[MAXBID-1];
+
+
+
+    int q=0;
     double currbid;
     darray newrho(MAXBID);
 
-    // compute Pi[{ q: bid[q] < x}] for all x
+    // compute Pi[{ q: bid[q] <= x}] for all x
     for( int x=0; x< MAXBID; x++)
     {
 
         currbid = (double) x*PRECISION_BID;
-        if(x>0) newrho[x] = newrho[x-1];
-        while((optimal_policy[q] <= currbid) && (q < QFINAL))
+        if(x>0) {
+            newrho[x] = newrho[x-1];
+        }
+        if(x==3499){
+            cout<<"q: "<<q<<"bid: "<<optimal_policy[q]<<endl;
+        }
+        while((optimal_policy[q] <= currbid) && (q < MAXQUEUE))
         {
-            newrho[x] += Pi[q];
+            newrho[x] = Pi[max(q,0)];
             q++;
-            if( q >= QFINAL) break;
+            if( q >= MAXQUEUE) break;
         }
 
     }
+    rho_cum = newrho[MAXBID-1];
     // compute difference between new and the old one
-    double diff = find_norm_diff(newrho, rho, QFINAL);
-    for(x=0;x<MAXBID;x++)
+    double diff = find_norm_diff(newrho, rho, MAXBID);
+    for(int x=0;x<MAXBID;x++)
         rho[x] = newrho[x];
     return(diff);
 }
@@ -172,15 +202,17 @@ void state_change(vector<User *> user_array,darray &optimal_policy){
         // User found. Apply queue dynamics now.
 
         // Remove packet from the server who won
-        user_allocated->queue_state = round(max((user_allocated->queue_state)*PRECISION_STATE -1,0)/PRECISION_STATE);
+        user_allocated->queue_state = max( (user_allocated->queue_state)-SERVICE,0);
+//        cout<<"test"<<endl;
+    }
+
+    for(auto user:user_array){
         // Add the arrival packets to each user
-        for (auto user: user_array){
-            double arrival_pkt_size = (rand()%100)*PRECISION_STATE;
-            user->queue_state  = min(round( ((user_allocated->queue_state)*PRECISION_STATE + arrival_pkt_size)/PRECISION_STATE), MAXQUEUE);
-            //Regenration
-            if(rand()%100<BETA*100){
-                user->queue_state  = (rand()%MAXREGEN);
-            }
+        double arrival_pkt_size = (rand()%MAXARRIVAL)*PRECISION_STATE;
+        user->queue_state  = min(round( ((user->queue_state)*PRECISION_STATE + arrival_pkt_size)/PRECISION_STATE), QFINAL);
+        //Regenration
+        if(rand()%100>BETA*100){
+            user->queue_state  = (rand()%MAXREGEN);
         }
     }
 
@@ -215,7 +247,7 @@ void value_iteration(darray &rho, darray &V, darray const &Phi, darray &Optimal_
             DeltaV   	    =  Vfail - Vsucc; //  E_A [ V [ q + A ] - E_A [ V [ max(q-service,0) + A ]
             //printf("%f\t%f\n", curstate,nextstate_on_succ);
             Vnew[q]     	    =  cost(curstate) + beta*Vfail - integratesuccprob(rho, beta*DeltaV); //  V = C(q) + E_A [ V [ q + A ] - int_{0}^{beta Delta V} p_{\rho}(x)
-            Optimal_Policy[q] =  beta*DeltaV;
+            Optimal_Policy[q] =  min(beta*DeltaV,MAXBID*PRECISION_BID);
         }
         /* find difference between Vnew and V */
         diff = find_norm_diff(V, Vnew, QFINAL);
@@ -363,6 +395,17 @@ void write_func_queue(darray &function,string file_name){
         out_p_rho_file << i *PRECISION_STATE<< " " << function[i]<<endl;
     }
     out_p_rho_file.close();
+}
+void write_func_queue_trunc(darray &function,string file_name,unsigned int limit){
+    ofstream out_p_rho_file;
+    out_p_rho_file.open (OUTPUT_FILE_PATH+file_name);
+
+    out_p_rho_file << "queue"<< " "<<"value"<<endl;
+    for(int i=0;i<limit;i++) {
+        out_p_rho_file << i *PRECISION_STATE<< " " << function[i]<<endl;
+    }
+    out_p_rho_file.close();
+
 }
 
 void write_func_bid(darray &function,string file_name){

@@ -28,7 +28,7 @@ int SERVICE           =  500;                /* serivice in each time slot  */
 double BETA           =  0.9;             /* 1 - regenration probability */
 unsigned int MAXREGEN =  100;         /* regeneration yields a random queue length, Maximum value of regenerated queue */
 unsigned int MINREGEN =    0;
-unsigned int M        =   15;              /* Number of users in each cell */
+unsigned int M        =   10;              /* Number of users in each cell */
 unsigned int MAXBID   = 3500;          /*  Bid space trunction, max bid < 2000 */
 unsigned int QFINAL   = 2000;          /*  State trunction, max queuelength < 15 :  MAXARRIVAL * (1/(1-beta)) * a large constant, Queue exceeds this value with small probability  */
 unsigned int MAXQUEUE = 2500;
@@ -38,8 +38,8 @@ darray generate_linspace(double start,double end, int No_Values);
 iarray generate_intspace(double start,double end, int No_Values);
 
 
-uint Total_Users= 10000;
-uint No_Users_Per_Cell = 5;
+uint Total_Users= 100000;
+uint No_Users_Per_Cell = 10;
 uint No_Cells = Total_Users/No_Users_Per_Cell;
 iarray Cells_Space = generate_intspace(0,No_Cells,No_Cells);
 
